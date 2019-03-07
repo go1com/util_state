@@ -34,6 +34,11 @@ class State
         );
     }
 
+    public function clear(int $id): int
+    {
+        return $this->db->delete($this->tableName, ['id' => $id]);
+    }
+
     public function set(int $id, $val)
     {
         try {
