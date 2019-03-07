@@ -7,6 +7,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Types\Type;
 use PDO;
+use UnexpectedValueException;
 
 class State
 {
@@ -21,7 +22,7 @@ class State
 
     public function install()
     {
-        SchemaHelper::install(
+        Helper::install(
             $this->db,
             function (Schema $schema) {
                 if (!$schema->hasTable($this->tableName)) {
@@ -41,18 +42,29 @@ class State
 
     public function set(int $id, $val)
     {
-        try {
-            $this->db->insert($this->tableName, [
-                'id'  => $id,
-                'val' => json_encode($val),
-            ]);
-        } catch (UniqueConstraintViolationException $e) {
-            $this->db->update(
-                $this->tableName,
-                ['val' => json_encode($val)],
-                ['id' => $id]
-            );
+        if (!is_array($val) && !is_object($val)) {
+            throw new UnexpectedValueException('state value: expecting array or object for');
         }
+
+        Helper::safeThread(
+            $this->db,
+            $this->tableName . '_' . $id,
+            3,
+            function () use ($id, &$val) {
+                try {
+                    $this->db->insert($this->tableName, [
+                        'id'  => $id,
+                        'val' => json_encode($val),
+                    ]);
+                } catch (UniqueConstraintViolationException $e) {
+                    $this->db->update(
+                        $this->tableName,
+                        ['val' => json_encode($val)],
+                        ['id' => $id]
+                    );
+                }
+            }
+        );
     }
 
     public function get(array $ids): array
